@@ -1,2 +1,2 @@
 # My-Taste
-Creates a CSV or JSON of your rated movies in Taste.io
+Get your movie ratings from Tast.io
