@@ -3,10 +3,7 @@
 from argparse import ArgumentParser
 import brotli
 from csv import DictWriter
-from urllib2 import Request, urlopen
 from json import loads, dumps
-from jsonschema import validate  # requires installation
-from pprint import pprint, PrettyPrinter
 from requests import get, post, codes
 from sys import argv
 from string import join
