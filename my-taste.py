@@ -66,7 +66,7 @@ class TasteRatings:
   def is_valid_respons(self, response):
     ret = False
 
-    if(response.status_code != 200):
+    if(response.status_code != codes.ok):
       print("ERROR! requst failure with <{}>".format(response.status_code))
       return ret
 
