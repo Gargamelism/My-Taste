@@ -8,7 +8,7 @@ Get your movie ratings from Tast.io
 
 ## Usage examples
 - `my-taste.py -e your@email.com -p y0urP4$$w0rd -j -c` export your rating list as a JSON (`-j`) and as a CSV(`-c`).
--`my-taste.py -C my_taste_conf.json` use configuration file as input.
+- `my-taste.py -C my_taste_conf.json` use configuration file as input.
 
 ## Configuration example
 `{"email": "your@email.com",
