@@ -7,11 +7,44 @@ from json import loads, dumps
 from requests import get, post, codes
 from sys import argv
 from string import join
+from os import path
+from jsonschema import validate, ValidationError
 
 def email_user(email):
-    return email[:email.find('@')]
+  return email[:email.find('@')]
 
-class TasteRatings:
+def safe_read(file_path, mode):
+  try:
+    with open(file_path, mode) as file:
+      return file.read()
+  except:
+    return False
+
+def safe_write(file_path, mode, content):
+  try:
+    with open(file_path, mode) as file:
+      file.write(content)
+      return True
+  except:
+    return False
+
+class TasteException(Exception):
+  def __init__(self, error_message):
+    Exception.__init__(self, error_message)
+
+class TasteRatings():
+  conf_schema = {
+    "type": "object",
+    "properties": {
+      "email": {"type": "string",
+                "pattern": "(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)"},
+      "password": {"type": "string"},
+      "json": {"type": "boolean"},
+      "csv": {"type": "boolean"}
+    },
+    "required": ["email", "password"]
+  }
+
   base_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36',
                    'Accept': 'application/json, text/plain, */*',
                    'Accept-Encoding': 'gzip, deflate, br',
@@ -23,10 +56,13 @@ class TasteRatings:
 
   kept_keys = ['year', 'name', 'user_rating', 'taste_rating', 'description']
 
-  def __init__(self, email, pwd):
-    self._email = email
-    self._pwd = pwd
+  def __init__(self, conf):
+    self._email = conf['email']
+    self._pwd = conf['password']
     self._headers = TasteRatings.base_headers
+
+    if(not self._email or not self._pwd):
+      raise TasteException("missing args to initialize class")
 
   def build_cookie(self, response):
     cfduid = ''
@@ -60,8 +96,10 @@ class TasteRatings:
     response = post('https://www.taste.io/auth/local', data = payload)
     if(response.status_code != codes.ok):
       print("ERROR! server returned: <{}>".format(response.status_code))
+      return False
 
     self._headers['Cookie'] = self.build_cookie(response)
+    return True
 
   def is_valid_respons(self, response):
     ret = False
@@ -123,9 +161,10 @@ class TasteRatings:
 def parse_args():
   parser = ArgumentParser(description = 'Retrieve your taste.io ratings as a json/csv')
 
-  parser.add_argument('-e', '--email', required=True, dest='email', help='email used to login to taste.io')
+  parser.add_argument('-C', '--conf-file', required=False, dest='conf_file', default='my_taste_conf.json', help='configuration file with a JSON with the keys \'email\' and \'password\' if not provided, it will create one automatically')
 
-  parser.add_argument('-p', '--password', required=True, dest='password', help='password used to login to taste.io')
+  parser.add_argument('-e', '--email', required=False, dest='email', help='email used to login to taste.io')
+  parser.add_argument('-p', '--password', required=False, dest='password', help='password used to login to taste.io')
 
   parser.add_argument('-j', '--json', action='store_const', required=False, dest='json',
                       const=True, help='output is in json form')
@@ -134,11 +173,11 @@ def parse_args():
                       const=True, help='output is in csv form')
 
   parsed = parser.parse_args(argv[1:])
-  return [parsed.email, parsed.password, parsed.json, parsed.csv]
+  return [parsed.conf_file, parsed.email, parsed.password, parsed.json, parsed.csv]
 
 def print_json_file(file_name, json):
   out_file = open("{}.json".format(file_name), "w")
-  out_file.write(dumps(parsed_movies, indent=4, sort_keys=True))
+  out_file.write(dumps(json, indent=4, sort_keys=True))
   out_file.close()
 
 def print_csv_file(file_name, parsed_movies):
@@ -149,19 +188,53 @@ def print_csv_file(file_name, parsed_movies):
     for movie in parsed_movies:
       writer.writerow(movie)
 
-def main():
-    email, pwd, json, csv = parse_args()
+def parse_conf_file(conf_file, email, pwd, json, csv):
+  conf = {}
+  if(not path.exists(conf_file) or (not path.getsize(conf_file) > 0)):
+    conf['email'] = email
+    conf['password'] = pwd
 
-    taste_ratings = TasteRatings(email, pwd)
-    taste_ratings.login()
+    if(json == None):
+      json = False
+    conf['json'] = json
+
+    if(csv == None):
+      csv = False
+    conf['csv'] = csv
+
+    safe_write(conf_file, 'w', dumps(conf))
+  else:
+    conf = loads(safe_read(conf_file, 'r'))
+
+  try:
+    validate(conf, TasteRatings.conf_schema)
+  except ValidationError as e:
+    print(str(e))
+    return False
+
+  return conf
+
+def main():
+    conf_file, email, pwd, json, csv = parse_args()
+
+    conf = parse_conf_file(conf_file, email, pwd, json, csv)
+    if(not conf):
+      print("Not done!")
+      return 1
+
+    taste_ratings = TasteRatings(conf)
+    if(not taste_ratings.login()):
+      print("Not done!")
+      return 1
+
     parsed_movies = taste_ratings.ratings()
 
-    file_name = email_user(email) + "_taste_ratings"
+    file_name = email_user(conf['email']) + "_taste_ratings"
 
-    if(json):
+    if(json or conf['json'] or (not json and not csv)):
       print_json_file(file_name, parsed_movies)
 
-    if(csv):
+    if(csv or conf['csv']):
       print_csv_file(file_name, parsed_movies)
 
     print("Done!")
